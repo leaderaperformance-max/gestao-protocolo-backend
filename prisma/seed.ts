@@ -12,6 +12,7 @@ const prisma = new PrismaClient({ adapter });
 
 async function main() {
   console.log('Seeding database...');
+  console.warn('⚠️  SEGURANÇA: Senha padrão do admin é "Admin@2026!" — ALTERE IMEDIATAMENTE após o primeiro login!');
 
   // 1. Create sectors
   const sectorsData = [
@@ -112,6 +113,7 @@ async function main() {
   console.log('Role upserted: secretario');
 
   // 4. Create admin user
+  // SECURITY: Default password — MUST be changed after first login
   const passwordHash = await bcrypt.hash('Admin@2026!', 12);
   const adminUser = await prisma.user.upsert({
     where: { email: 'admin@semed.prainha.pa.gov.br' },

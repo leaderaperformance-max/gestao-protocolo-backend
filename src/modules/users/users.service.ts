@@ -2,6 +2,7 @@ import { Injectable, ConflictException, NotFoundException } from '@nestjs/common
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import * as bcrypt from 'bcrypt';
+import type { Prisma } from '@prisma/client';
 
 @Injectable()
 export class UsersService {
@@ -52,14 +53,21 @@ export class UsersService {
 
   async update(id: string, dto: Partial<CreateUserDto>) {
     await this.findOne(id);
-    const data: Record<string, unknown> = { ...dto };
-    if (dto.password) {
-      data['passwordHash'] = await bcrypt.hash(dto.password, 12);
-      delete data['password'];
+
+    const updateData: Prisma.UserUpdateInput = {};
+
+    if (dto.name !== undefined) updateData.name = dto.name;
+    if (dto.email !== undefined) updateData.email = dto.email;
+    if (dto.registrationNumber !== undefined) updateData.registrationNumber = dto.registrationNumber;
+    if (dto.sectorId !== undefined) updateData.sector = { connect: { id: dto.sectorId } };
+    if (dto.roleId !== undefined) updateData.role = { connect: { id: dto.roleId } };
+    if (dto.password !== undefined) {
+      updateData.passwordHash = await bcrypt.hash(dto.password, 12);
     }
+
     const updated = await this.prisma.user.update({
       where: { id },
-      data,
+      data: updateData,
       include: { role: true, sector: true },
     });
     const { passwordHash: _ph, ...rest } = updated;
