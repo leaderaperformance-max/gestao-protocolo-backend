@@ -63,7 +63,7 @@ export class TramitationsService {
     const destUsers = await this.prisma.user.findMany({
       where: { sectorId: toSector.id, isActive: true },
     });
-    await Promise.all(
+    void Promise.all(
       destUsers.map((u) =>
         this.notifications.create({
           userId: u.id,
@@ -73,7 +73,7 @@ export class TramitationsService {
           relatedRequestId: requestId,
         }),
       ),
-    );
+    ).catch(() => {});
 
     return tramitation;
   }
@@ -140,13 +140,13 @@ export class TramitationsService {
     ]);
 
     // Notify requester (fire-and-forget)
-    await this.notifications.create({
+    void this.notifications.create({
       userId: request.requesterId,
       title: 'Status do protocolo atualizado',
       body: `Seu protocolo ${request.protocolNumber} agora está: ${dto.status.replace(/_/g, ' ')}`,
       type: 'STATUS_CHANGED',
       relatedRequestId: requestId,
-    });
+    }).catch(() => {});
 
     return { message: 'Status atualizado com sucesso', status: dto.status };
   }

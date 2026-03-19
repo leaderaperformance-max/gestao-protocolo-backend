@@ -23,8 +23,10 @@ export class AttachmentsService {
     const request = await this.prisma.request.findUnique({ where: { id: requestId } });
     if (!request) throw new NotFoundException('Protocolo não encontrado');
 
+    // Get filename without extension to avoid double extensions (e.g. file.pdf.pdf)
+    const originalNameWithoutExt = file.originalname.replace(/\.[^/.]+$/, '');
     const ext = file.mimetype === 'application/pdf' ? 'pdf' : 'jpg';
-    const storagePath = `${requestId}/${Date.now()}-${file.originalname}.${ext}`;
+    const storagePath = `${requestId}/${Date.now()}-${originalNameWithoutExt}.${ext}`;
 
     const { error } = await this.supabase.storage
       .from(this.supabase.bucket)
@@ -32,16 +34,23 @@ export class AttachmentsService {
 
     if (error) throw new BadRequestException(`Erro no upload: ${error.message}`);
 
-    return this.prisma.attachment.create({
-      data: {
-        requestId,
-        uploadedByUserId: userId,
-        filename: file.originalname,
-        storagePath,
-        mimeType: file.mimetype,
-        sizeBytes: file.size,
-      },
-    });
+    // If DB write fails, clean up the orphaned storage file
+    try {
+      return await this.prisma.attachment.create({
+        data: {
+          requestId,
+          uploadedByUserId: userId,
+          filename: file.originalname,
+          storagePath,
+          mimeType: file.mimetype,
+          sizeBytes: file.size,
+        },
+      });
+    } catch (dbError) {
+      // Attempt to clean up the uploaded file — fire-and-forget
+      void this.supabase.storage.from(this.supabase.bucket).remove([storagePath]).catch(() => {});
+      throw dbError;
+    }
   }
 
   async getSignedUrl(attachmentId: string) {
