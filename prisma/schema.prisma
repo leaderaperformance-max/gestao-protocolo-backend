@@ -33,8 +33,8 @@ model Sector {
   isActive Boolean @default(true)
 
   users              User[]
-  requestsOrigin     Request[] @relation("SectorOrigin")
-  requestsCurrent    Request[] @relation("SectorCurrent")
+  requestsOrigin     Request[]            @relation("SectorOrigin")
+  requestsCurrent    Request[]            @relation("SectorCurrent")
   tramitationsFrom   RequestTramitation[] @relation("TramitationFrom")
   tramitationsTo     RequestTramitation[] @relation("TramitationTo")
 
@@ -67,7 +67,10 @@ model User {
   attachmentsUploaded  Attachment[]
   notifications        Notification[]
   refreshTokens        RefreshToken[]
+  requestTypesCreated  RequestType[]          @relation("RequestTypeCreator")
 
+  @@index([sectorId])
+  @@index([roleId])
   @@map("users")
 }
 
@@ -81,6 +84,7 @@ model RefreshToken {
 
   user User @relation(fields: [userId], references: [id])
 
+  @@index([userId])
   @@map("refresh_tokens")
 }
 
@@ -89,13 +93,14 @@ model RefreshToken {
 // ==========================================
 
 model RequestType {
-  id        String   @id @default(uuid())
-  name      String
-  slaDays   Int
-  flow      Json
-  isActive  Boolean  @default(true)
-  createdBy String
-  createdAt DateTime @default(now())
+  id              String   @id @default(uuid())
+  name            String
+  slaDays         Int
+  flow            Json
+  isActive        Boolean  @default(true)
+  createdByUserId String
+  createdBy       User     @relation("RequestTypeCreator", fields: [createdByUserId], references: [id])
+  createdAt       DateTime @default(now())
 
   requests Request[]
 
@@ -107,10 +112,11 @@ model RequestType {
 // ==========================================
 
 model ProtocolSequence {
-  id           String @id @default(uuid())
+  id           String   @id @default(uuid())
   year         Int
   sectorCode   String
-  lastSequence Int    @default(0)
+  lastSequence Int      @default(0)
+  updatedAt    DateTime @updatedAt
 
   @@unique([year, sectorCode])
   @@map("protocol_sequences")
@@ -152,6 +158,11 @@ model Request {
   statusHistory RequestStatusHistory[]
   attachments   Attachment[]
 
+  @@index([status])
+  @@index([currentSectorId])
+  @@index([requesterId])
+  @@index([createdAt])
+  @@index([deadlineAt])
   @@map("requests")
 }
 
@@ -172,6 +183,7 @@ model RequestTramitation {
   sentBy     User    @relation("SentBy", fields: [sentByUserId], references: [id])
   receivedBy User?   @relation("ReceivedBy", fields: [receivedByUserId], references: [id])
 
+  @@index([requestId])
   @@map("request_tramitations")
 }
 
@@ -187,6 +199,7 @@ model RequestStatusHistory {
   request   Request @relation(fields: [requestId], references: [id])
   changedBy User    @relation(fields: [changedByUserId], references: [id])
 
+  @@index([requestId])
   @@map("request_status_history")
 }
 
@@ -207,6 +220,7 @@ model Attachment {
   request    Request @relation(fields: [requestId], references: [id])
   uploadedBy User    @relation(fields: [uploadedByUserId], references: [id])
 
+  @@index([requestId])
   @@map("attachments")
 }
 
@@ -215,16 +229,22 @@ model Attachment {
 // ==========================================
 
 model AuditLog {
-  id            String   @id @default(uuid())
-  actorUserId   String
-  action        String
-  entityType    String
-  entityId      String
+  id          String   @id @default(uuid())
+  action      String
+  entityType  String
+  entityId    String
   payloadBefore Json?
   payloadAfter  Json?
-  ipAddress     String?
-  createdAt     DateTime @default(now())
+  ipAddress   String?
+  createdAt   DateTime @default(now())
 
+  // actorUserId is intentionally NOT a FK relation to User.
+  // This preserves audit log integrity even when users are deleted.
+  actorUserId String
+
+  @@index([entityType, entityId])
+  @@index([actorUserId])
+  @@index([createdAt])
   @@map("audit_logs")
 }
 
@@ -244,5 +264,6 @@ model Notification {
 
   user User @relation(fields: [userId], references: [id])
 
+  @@index([userId, isRead])
   @@map("notifications")
 }
