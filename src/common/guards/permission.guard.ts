@@ -5,7 +5,7 @@ import { PERMISSION_KEY, Permission } from '../decorators/require-permission.dec
 interface UserWithRole {
   role?: {
     isSuperadmin: boolean;
-    permissions: Record<string, boolean>;
+    permissions: Partial<Record<Permission, boolean>>;
   };
 }
 
@@ -25,6 +25,11 @@ export class PermissionGuard implements CanActivate {
     const { user } = request;
 
     if (!user) throw new ForbiddenException('Sem autenticação');
+
+    if (!user.role) {
+      throw new ForbiddenException('Usuário sem perfil de acesso atribuído');
+    }
+
     if (user.role?.isSuperadmin) return true;
 
     const permissions = user.role?.permissions;
