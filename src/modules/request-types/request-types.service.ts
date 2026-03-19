@@ -7,10 +7,15 @@ export class RequestTypesService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(dto: CreateRequestTypeDto, userId: string) {
-    // Validate all sector codes in flow exist
-    for (const code of dto.flow) {
-      const sector = await this.prisma.sector.findUnique({ where: { code } });
-      if (!sector) throw new BadRequestException(`Setor '${code}' não encontrado no fluxo`);
+    // Validate all sector codes in flow exist (single batch query)
+    const foundSectors = await this.prisma.sector.findMany({
+      where: { code: { in: dto.flow } },
+      select: { code: true },
+    });
+    if (foundSectors.length !== dto.flow.length) {
+      const foundCodes = new Set(foundSectors.map((s) => s.code));
+      const missing = dto.flow.filter((code) => !foundCodes.has(code));
+      throw new BadRequestException(`Setores não encontrados no fluxo: ${missing.join(', ')}`);
     }
 
     return this.prisma.requestType.create({
@@ -40,9 +45,14 @@ export class RequestTypesService {
   async update(id: string, dto: Partial<CreateRequestTypeDto>, userId: string) {
     await this.findOne(id);
     if (dto.flow) {
-      for (const code of dto.flow) {
-        const sector = await this.prisma.sector.findUnique({ where: { code } });
-        if (!sector) throw new BadRequestException(`Setor '${code}' não encontrado no fluxo`);
+      const foundSectors = await this.prisma.sector.findMany({
+        where: { code: { in: dto.flow } },
+        select: { code: true },
+      });
+      if (foundSectors.length !== dto.flow.length) {
+        const foundCodes = new Set(foundSectors.map((s) => s.code));
+        const missing = dto.flow.filter((code) => !foundCodes.has(code));
+        throw new BadRequestException(`Setores não encontrados no fluxo: ${missing.join(', ')}`);
       }
     }
     return this.prisma.requestType.update({

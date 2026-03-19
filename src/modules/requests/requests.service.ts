@@ -82,9 +82,12 @@ export class RequestsService {
     }
     if (isOverdue) {
       where.deadlineAt = { lt: now };
-      where.status = {
-        notIn: [RequestStatus.DEFERIDO, RequestStatus.INDEFERIDO, RequestStatus.CONCLUIDO],
-      };
+      // Only apply the notIn status filter if no explicit status was requested
+      if (!status) {
+        where.status = {
+          notIn: [RequestStatus.DEFERIDO, RequestStatus.INDEFERIDO, RequestStatus.CONCLUIDO],
+        };
+      }
     }
 
     const [data, total] = await Promise.all([

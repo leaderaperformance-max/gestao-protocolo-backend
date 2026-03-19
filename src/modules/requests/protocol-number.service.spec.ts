@@ -2,17 +2,13 @@ import { ProtocolNumberService } from './protocol-number.service';
 
 describe('ProtocolNumberService', () => {
   const makePrismaMock = (lastSequence: number, sectorCode: string) => ({
-    $transaction: jest.fn().mockImplementation(async (fn: (tx: any) => Promise<any>) =>
-      fn({
-        protocolSequence: {
-          upsert: jest.fn().mockResolvedValue({
-            year: new Date().getFullYear(),
-            sectorCode,
-            lastSequence,
-          }),
-        },
+    protocolSequence: {
+      upsert: jest.fn().mockResolvedValue({
+        year: new Date().getFullYear(),
+        sectorCode,
+        lastSequence,
       }),
-    ),
+    },
   });
 
   it('should generate protocol number in correct format', async () => {

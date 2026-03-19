@@ -8,12 +8,11 @@ export class ProtocolNumberService {
   async generate(sectorCode: string): Promise<string> {
     const year = new Date().getFullYear();
 
-    const record = await this.prisma.$transaction(async (tx) => {
-      return tx.protocolSequence.upsert({
-        where: { year_sectorCode: { year, sectorCode } },
-        update: { lastSequence: { increment: 1 } },
-        create: { year, sectorCode, lastSequence: 1 },
-      });
+    // upsert with increment is atomic — no transaction wrapper needed for a single statement
+    const record = await this.prisma.protocolSequence.upsert({
+      where: { year_sectorCode: { year, sectorCode } },
+      update: { lastSequence: { increment: 1 } },
+      create: { year, sectorCode, lastSequence: 1 },
     });
 
     return `${year}-${sectorCode}-${String(record.lastSequence).padStart(6, '0')}`;
