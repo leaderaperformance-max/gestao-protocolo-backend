@@ -1,0 +1,248 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ==========================================
+// ROLES & PERMISSIONS
+// ==========================================
+
+model Role {
+  id           String  @id @default(uuid())
+  name         String
+  slug         String  @unique
+  permissions  Json
+  isSuperadmin Boolean @default(false)
+
+  users User[]
+
+  @@map("roles")
+}
+
+// ==========================================
+// SECTORS
+// ==========================================
+
+model Sector {
+  id       String  @id @default(uuid())
+  name     String
+  code     String  @unique
+  isActive Boolean @default(true)
+
+  users              User[]
+  requestsOrigin     Request[] @relation("SectorOrigin")
+  requestsCurrent    Request[] @relation("SectorCurrent")
+  tramitationsFrom   RequestTramitation[] @relation("TramitationFrom")
+  tramitationsTo     RequestTramitation[] @relation("TramitationTo")
+
+  @@map("sectors")
+}
+
+// ==========================================
+// USERS
+// ==========================================
+
+model User {
+  id                 String   @id @default(uuid())
+  name               String
+  email              String   @unique
+  passwordHash       String
+  registrationNumber String   @unique
+  sectorId           String
+  roleId             String
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  sector   Sector @relation(fields: [sectorId], references: [id])
+  role     Role   @relation(fields: [roleId], references: [id])
+
+  requestsCreated      Request[]              @relation("Requester")
+  tramitationsSent     RequestTramitation[]   @relation("SentBy")
+  tramitationsReceived RequestTramitation[]   @relation("ReceivedBy")
+  statusChanges        RequestStatusHistory[]
+  attachmentsUploaded  Attachment[]
+  notifications        Notification[]
+  refreshTokens        RefreshToken[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  token     String    @unique
+  userId    String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("refresh_tokens")
+}
+
+// ==========================================
+// REQUEST TYPES
+// ==========================================
+
+model RequestType {
+  id        String   @id @default(uuid())
+  name      String
+  slaDays   Int
+  flow      Json
+  isActive  Boolean  @default(true)
+  createdBy String
+  createdAt DateTime @default(now())
+
+  requests Request[]
+
+  @@map("request_types")
+}
+
+// ==========================================
+// PROTOCOL SEQUENCES
+// ==========================================
+
+model ProtocolSequence {
+  id           String @id @default(uuid())
+  year         Int
+  sectorCode   String
+  lastSequence Int    @default(0)
+
+  @@unique([year, sectorCode])
+  @@map("protocol_sequences")
+}
+
+// ==========================================
+// REQUESTS (PROTOCOLOS)
+// ==========================================
+
+enum RequestStatus {
+  PROTOCOLADO
+  RECEBIDO_PELO_SETOR
+  EM_ANALISE
+  PENDENTE_DOCUMENTO
+  DEFERIDO
+  INDEFERIDO
+  CONCLUIDO
+}
+
+model Request {
+  id              String        @id @default(uuid())
+  protocolNumber  String        @unique
+  requesterId     String
+  sectorOriginId  String
+  requestTypeId   String
+  description     String
+  status          RequestStatus @default(PROTOCOLADO)
+  currentSectorId String
+  deadlineAt      DateTime
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  requester     User        @relation("Requester", fields: [requesterId], references: [id])
+  sectorOrigin  Sector      @relation("SectorOrigin", fields: [sectorOriginId], references: [id])
+  requestType   RequestType @relation(fields: [requestTypeId], references: [id])
+  currentSector Sector      @relation("SectorCurrent", fields: [currentSectorId], references: [id])
+
+  tramitations  RequestTramitation[]
+  statusHistory RequestStatusHistory[]
+  attachments   Attachment[]
+
+  @@map("requests")
+}
+
+model RequestTramitation {
+  id               String    @id @default(uuid())
+  requestId        String
+  fromSectorId     String
+  toSectorId       String
+  sentByUserId     String
+  sentAt           DateTime  @default(now())
+  receivedByUserId String?
+  receivedAt       DateTime?
+  notes            String?
+
+  request    Request @relation(fields: [requestId], references: [id])
+  fromSector Sector  @relation("TramitationFrom", fields: [fromSectorId], references: [id])
+  toSector   Sector  @relation("TramitationTo", fields: [toSectorId], references: [id])
+  sentBy     User    @relation("SentBy", fields: [sentByUserId], references: [id])
+  receivedBy User?   @relation("ReceivedBy", fields: [receivedByUserId], references: [id])
+
+  @@map("request_tramitations")
+}
+
+model RequestStatusHistory {
+  id              String         @id @default(uuid())
+  requestId       String
+  previousStatus  RequestStatus?
+  newStatus       RequestStatus
+  changedByUserId String
+  justification   String?
+  changedAt       DateTime       @default(now())
+
+  request   Request @relation(fields: [requestId], references: [id])
+  changedBy User    @relation(fields: [changedByUserId], references: [id])
+
+  @@map("request_status_history")
+}
+
+// ==========================================
+// ATTACHMENTS
+// ==========================================
+
+model Attachment {
+  id               String   @id @default(uuid())
+  requestId        String
+  uploadedByUserId String
+  filename         String
+  storagePath      String
+  mimeType         String
+  sizeBytes        Int
+  uploadedAt       DateTime @default(now())
+
+  request    Request @relation(fields: [requestId], references: [id])
+  uploadedBy User    @relation(fields: [uploadedByUserId], references: [id])
+
+  @@map("attachments")
+}
+
+// ==========================================
+// AUDIT LOGS (APPEND-ONLY)
+// ==========================================
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  actorUserId   String
+  action        String
+  entityType    String
+  entityId      String
+  payloadBefore Json?
+  payloadAfter  Json?
+  ipAddress     String?
+  createdAt     DateTime @default(now())
+
+  @@map("audit_logs")
+}
+
+// ==========================================
+// NOTIFICATIONS
+// ==========================================
+
+model Notification {
+  id               String   @id @default(uuid())
+  userId           String
+  title            String
+  body             String
+  type             String
+  relatedRequestId String?
+  isRead           Boolean  @default(false)
+  createdAt        DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("notifications")
+}
