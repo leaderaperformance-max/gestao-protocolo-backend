@@ -10,6 +10,12 @@ const PdfPrinter = require('pdfmake') as new (fonts: object) => {
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const pdfFonts = require('pdfmake/build/vfs_fonts') as Record<string, string>;
 
+function loadFont(vfs: Record<string, string>, name: string): Buffer {
+  const b64 = vfs[name];
+  if (!b64) throw new Error(`Font not found in pdfmake vfs_fonts: ${name}`);
+  return Buffer.from(b64, 'base64');
+}
+
 @Injectable()
 export class ReportsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -49,10 +55,10 @@ export class ReportsService {
 
     const fonts = {
       Roboto: {
-        normal: Buffer.from(pdfFonts['Roboto-Regular.ttf'] ?? '', 'base64'),
-        bold: Buffer.from(pdfFonts['Roboto-Medium.ttf'] ?? '', 'base64'),
-        italics: Buffer.from(pdfFonts['Roboto-Italic.ttf'] ?? '', 'base64'),
-        bolditalics: Buffer.from(pdfFonts['Roboto-MediumItalic.ttf'] ?? '', 'base64'),
+        normal: loadFont(pdfFonts, 'Roboto-Regular.ttf'),
+        bold: loadFont(pdfFonts, 'Roboto-Medium.ttf'),
+        italics: loadFont(pdfFonts, 'Roboto-Italic.ttf'),
+        bolditalics: loadFont(pdfFonts, 'Roboto-MediumItalic.ttf'),
       },
     };
 

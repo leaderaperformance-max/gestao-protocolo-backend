@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { RequestStatus } from '@prisma/client';
+import { Prisma, RequestStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 const TERMINAL = [RequestStatus.DEFERIDO, RequestStatus.INDEFERIDO, RequestStatus.CONCLUIDO];
@@ -28,10 +28,13 @@ export class DashboardService {
   }
 
   async byPeriod(from: Date, to: Date, granularity: 'day' | 'week' | 'month' = 'day') {
+    const truncFn =
+      granularity === 'week'  ? Prisma.sql`DATE_TRUNC('week',  created_at)` :
+      granularity === 'month' ? Prisma.sql`DATE_TRUNC('month', created_at)` :
+                                Prisma.sql`DATE_TRUNC('day',   created_at)`;
+
     return this.prisma.$queryRaw<Array<{ period: Date; total: number }>>`
-      SELECT
-        DATE_TRUNC(${granularity}, created_at) AS period,
-        COUNT(*)::int AS total
+      SELECT ${truncFn} AS period, COUNT(*)::int AS total
       FROM requests
       WHERE created_at BETWEEN ${from} AND ${to}
       GROUP BY period
@@ -62,6 +65,7 @@ export class DashboardService {
   }
 
   async userActivity(limit = 10) {
+    const safeLimit = Math.min(Math.max(1, limit), 100);
     return this.prisma.$queryRaw<Array<{
       user_name: string;
       email: string;
@@ -76,7 +80,7 @@ export class DashboardService {
       WHERE al.created_at >= NOW() - INTERVAL '30 days'
       GROUP BY u.id, u.name, u.email
       ORDER BY total_actions DESC
-      LIMIT ${limit}
+      LIMIT ${safeLimit}
     `;
   }
 

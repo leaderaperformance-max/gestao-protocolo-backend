@@ -46,6 +46,7 @@ export class AuditLogsService {
     return this.prisma.auditLog.findMany({
       where: { entityType, entityId },
       orderBy: { createdAt: 'desc' },
+      take: 200, // reasonable upper bound for entity history
     });
   }
 }
