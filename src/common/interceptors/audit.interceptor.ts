@@ -5,6 +5,7 @@ import {
   NestInterceptor,
 } from '@nestjs/common';
 import { Observable, tap } from 'rxjs';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 const WRITE_METHODS = ['POST', 'PATCH', 'PUT', 'DELETE'];
@@ -41,8 +42,8 @@ export class AuditInterceptor implements NestInterceptor {
                 action,
                 entityType: this.extractEntityType(url),
                 entityId: responseData?.id ?? 'unknown',
-                payloadBefore: null,
-                payloadAfter: startPayload,
+                payloadBefore: Prisma.JsonNull,
+                payloadAfter: startPayload as Prisma.InputJsonValue,
                 ipAddress: ip,
               },
             })
