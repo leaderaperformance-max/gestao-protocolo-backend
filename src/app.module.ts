@@ -8,6 +8,8 @@ import { AuthModule } from './modules/auth/auth.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { UsersModule } from './modules/users/users.module';
 import { SectorsModule } from './modules/sectors/sectors.module';
+import { RequestTypesModule } from './modules/request-types/request-types.module';
+import { RequestsModule } from './modules/requests/requests.module';
 
 @Module({
   imports: [
@@ -19,6 +21,8 @@ import { SectorsModule } from './modules/sectors/sectors.module';
     RolesModule,
     UsersModule,
     SectorsModule,
+    RequestTypesModule,
+    RequestsModule,
   ],
 })
 export class AppModule {}
