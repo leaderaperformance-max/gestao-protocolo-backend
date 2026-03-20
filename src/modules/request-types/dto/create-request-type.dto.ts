@@ -2,21 +2,34 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsArray, IsInt, IsOptional, IsString, Min } from 'class-validator';
 
 export class CreateRequestTypeDto {
-  @ApiProperty({ example: 'Licença Prêmio' })
+  @ApiProperty({
+    description: 'Nome do tipo de solicitação',
+    example: 'Licença Prêmio',
+  })
   @IsString()
   name!: string;
 
-  @ApiProperty({ example: 30, description: 'SLA em dias úteis' })
+  @ApiProperty({
+    description: 'Prazo em dias úteis para atendimento (SLA)',
+    example: 30,
+  })
   @IsInt()
   @Min(1)
   slaDays!: number;
 
-  @ApiProperty({ example: ['PROT', 'RH', 'JUR', 'GAB'], description: 'Sequência de setores no fluxo' })
+  @ApiProperty({
+    description: 'Sequência de códigos de setores no fluxo de tramitação',
+    example: ['PROT', 'RH', 'GAB'],
+  })
   @IsArray()
   @IsString({ each: true })
   flow!: string[];
 
-  @ApiPropertyOptional({ default: true })
+  @ApiPropertyOptional({
+    description: 'Se o tipo está ativo',
+    example: true,
+    default: true,
+  })
   @IsOptional()
   isActive?: boolean;
 }

@@ -1,12 +1,12 @@
 import { Controller, Get, Header, Query, Req, Res } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { ReportQueryDto } from './dto/report-query.dto';
 import { ReportsService } from './reports.service';
 import { AuditService } from '../audit-logs/audit.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
-@ApiTags('reports')
+@ApiTags('Relatórios')
 @ApiBearerAuth()
 @Controller('reports')
 export class ReportsController {
@@ -19,6 +19,9 @@ export class ReportsController {
   @Header('Content-Type', 'application/pdf')
   @Header('Content-Disposition', 'attachment; filename="protocolos.pdf"')
   @ApiOperation({ summary: 'Gerar relatório PDF de protocolos com filtros' })
+  @ApiResponse({ status: 200, description: 'Relatório PDF gerado com sucesso' })
+  @ApiResponse({ status: 401, description: 'Token JWT ausente ou inválido' })
+  @ApiResponse({ status: 403, description: 'Sem permissão para esta ação' })
   async generatePdf(
     @CurrentUser() user: { id: string },
     @Req() req: Request,

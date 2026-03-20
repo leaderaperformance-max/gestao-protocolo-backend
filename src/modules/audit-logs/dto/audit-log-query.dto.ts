@@ -3,17 +3,66 @@ import { IsDateString, IsInt, IsOptional, IsString, Max, Min } from 'class-valid
 import { Type } from 'class-transformer';
 
 export class AuditLogQueryDto {
-  @ApiPropertyOptional() @IsOptional() @IsString() entityType?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() entityId?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() actorUserId?: string;
-  @ApiPropertyOptional() @IsOptional() @IsDateString() from?: string;
-  @ApiPropertyOptional() @IsOptional() @IsDateString() to?: string;
+  @ApiPropertyOptional({
+    description: 'Tipo da entidade (ex: requests, users)',
+    example: 'requests',
+  })
+  @IsOptional()
+  @IsString()
+  entityType?: string;
 
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional() @IsInt() @Min(1) @Type(() => Number)
+  @ApiPropertyOptional({
+    description: 'ID da entidade',
+    example: 'uuid',
+  })
+  @IsOptional()
+  @IsString()
+  entityId?: string;
+
+  @ApiPropertyOptional({
+    description: 'ID do usuário que realizou a ação',
+    example: 'uuid',
+  })
+  @IsOptional()
+  @IsString()
+  actorUserId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Data inicial',
+    example: '2026-01-01',
+  })
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+
+  @ApiPropertyOptional({
+    description: 'Data final',
+    example: '2026-03-19',
+  })
+  @IsOptional()
+  @IsDateString()
+  to?: string;
+
+  @ApiPropertyOptional({
+    description: 'Página',
+    example: 1,
+    default: 1,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
   page?: number = 1;
 
-  @ApiPropertyOptional({ default: 50 })
-  @IsOptional() @IsInt() @Min(1) @Max(100) @Type(() => Number)
+  @ApiPropertyOptional({
+    description: 'Itens por página (máx: 100)',
+    example: 50,
+    default: 50,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  @Type(() => Number)
   limit?: number = 50;
 }
