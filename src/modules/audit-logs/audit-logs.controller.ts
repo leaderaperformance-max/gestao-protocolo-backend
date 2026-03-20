@@ -1,26 +1,55 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Param, Query, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import type { Request } from 'express';
 import { AuditLogsService } from './audit-logs.service';
+import { AuditService } from './audit.service';
 import { AuditLogQueryDto } from './dto/audit-log-query.dto';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('audit-logs')
 @ApiBearerAuth()
 @Controller('audit-logs')
 export class AuditLogsController {
-  constructor(private readonly auditLogsService: AuditLogsService) {}
+  constructor(
+    private readonly auditLogsService: AuditLogsService,
+    private readonly auditService: AuditService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'Consultar log de auditoria com filtros (somente leitura)' })
-  findAll(@Query() query: AuditLogQueryDto) {
+  findAll(
+    @CurrentUser() user: { id: string },
+    @Req() req: Request,
+    @Query() query: AuditLogQueryDto,
+  ) {
+    this.auditService.log({
+      actorUserId: user.id,
+      action: 'VIEW_AUDIT_LOGS',
+      entityType: 'audit-logs',
+      entityId: 'search',
+      payloadAfter: { ...query } as Record<string, unknown>,
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'] as string | undefined,
+    });
     return this.auditLogsService.findAll(query);
   }
 
   @Get(':entityType/:entityId')
   @ApiOperation({ summary: 'Histórico completo de uma entidade específica' })
   findByEntity(
+    @CurrentUser() user: { id: string },
+    @Req() req: Request,
     @Param('entityType') entityType: string,
     @Param('entityId') entityId: string,
   ) {
+    this.auditService.log({
+      actorUserId: user.id,
+      action: 'VIEW_AUDIT_LOGS',
+      entityType: 'audit-logs',
+      entityId: `${entityType}/${entityId}`,
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'] as string | undefined,
+    });
     return this.auditLogsService.findByEntity(entityType, entityId);
   }
 }

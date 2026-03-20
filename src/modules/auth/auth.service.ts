@@ -6,6 +6,7 @@ import {
 import { JwtService, JwtSignOptions } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AuditService } from '../audit-logs/audit.service';
 import * as bcrypt from 'bcrypt';
 import { LoginDto } from './dto/login.dto';
 import type { Response } from 'express';
@@ -16,20 +17,39 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
+    private readonly auditService: AuditService,
   ) {}
 
-  async login(dto: LoginDto, res: Response) {
+  async login(dto: LoginDto, res: Response, ip?: string, userAgent?: string) {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
       include: { role: true, sector: true },
     });
 
     if (!user || !user.isActive) {
+      this.auditService.log({
+        actorUserId: 'anonymous',
+        action: 'LOGIN_FAILURE',
+        entityType: 'auth',
+        entityId: dto.email,
+        payloadAfter: { reason: !user ? 'user_not_found' : 'user_inactive' },
+        ipAddress: ip,
+        userAgent,
+      });
       throw new UnauthorizedException('Credenciais inválidas');
     }
 
     const passwordMatch = await bcrypt.compare(dto.password, user.passwordHash);
     if (!passwordMatch) {
+      this.auditService.log({
+        actorUserId: user.id,
+        action: 'LOGIN_FAILURE',
+        entityType: 'auth',
+        entityId: user.id,
+        payloadAfter: { reason: 'invalid_password' },
+        ipAddress: ip,
+        userAgent,
+      });
       throw new UnauthorizedException('Credenciais inválidas');
     }
 
@@ -51,11 +71,20 @@ export class AuthService {
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
+    this.auditService.log({
+      actorUserId: user.id,
+      action: 'LOGIN_SUCCESS',
+      entityType: 'auth',
+      entityId: user.id,
+      ipAddress: ip,
+      userAgent,
+    });
+
     const { passwordHash: _ph, ...userWithoutPassword } = user;
     return { accessToken: tokens.accessToken, user: userWithoutPassword };
   }
 
-  async refresh(refreshToken: string | undefined, res: Response) {
+  async refresh(refreshToken: string | undefined, res: Response, ip?: string, userAgent?: string) {
     if (!refreshToken) throw new BadRequestException('Refresh token não fornecido');
 
     const stored = await this.prisma.refreshToken.findUnique({
@@ -95,13 +124,23 @@ export class AuthService {
         maxAge: 7 * 24 * 60 * 60 * 1000,
       });
 
+      this.auditService.log({
+        actorUserId: payload.sub,
+        action: 'TOKEN_REFRESH',
+        entityType: 'auth',
+        entityId: payload.sub,
+        ipAddress: ip,
+        userAgent,
+      });
+
       return { accessToken: tokens.accessToken };
-    } catch {
+    } catch (err) {
+      if (err instanceof UnauthorizedException) throw err;
       throw new UnauthorizedException('Refresh token inválido');
     }
   }
 
-  async logout(refreshToken: string | undefined, res: Response) {
+  async logout(refreshToken: string | undefined, res: Response, userId: string, ip?: string, userAgent?: string) {
     if (refreshToken) {
       await this.prisma.refreshToken
         .update({
@@ -111,6 +150,16 @@ export class AuthService {
         .catch(() => {});
     }
     res.clearCookie('refresh_token');
+
+    this.auditService.log({
+      actorUserId: userId,
+      action: 'LOGOUT',
+      entityType: 'auth',
+      entityId: userId,
+      ipAddress: ip,
+      userAgent,
+    });
+
     return { message: 'Logout realizado com sucesso' };
   }
 

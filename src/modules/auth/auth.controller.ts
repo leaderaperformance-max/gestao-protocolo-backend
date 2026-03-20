@@ -32,9 +32,10 @@ export class AuthController {
   @ApiOperation({ summary: 'Realizar login e obter tokens' })
   login(
     @Body() dto: LoginDto,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    return this.authService.login(dto, res);
+    return this.authService.login(dto, res, req.ip, req.headers['user-agent'] as string | undefined);
   }
 
   @Post('refresh')
@@ -43,16 +44,20 @@ export class AuthController {
   @ApiOperation({ summary: 'Renovar access token usando refresh token (cookie)' })
   refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const refreshToken = req.cookies?.['refresh_token'] as string | undefined;
-    return this.authService.refresh(refreshToken, res);
+    return this.authService.refresh(refreshToken, res, req.ip, req.headers['user-agent'] as string | undefined);
   }
 
   @Post('logout')
   @HttpCode(200)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Realizar logout e revogar refresh token' })
-  logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+  logout(
+    @CurrentUser() user: { id: string },
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const refreshToken = req.cookies?.['refresh_token'] as string | undefined;
-    return this.authService.logout(refreshToken, res);
+    return this.authService.logout(refreshToken, res, user.id, req.ip, req.headers['user-agent'] as string | undefined);
   }
 
   @Get('me')
