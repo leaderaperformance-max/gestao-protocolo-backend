@@ -6,22 +6,25 @@ import {
   NestInterceptor,
 } from '@nestjs/common';
 import { Observable, tap } from 'rxjs';
-import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AuditService } from '../../modules/audit-logs/audit.service';
 
 const WRITE_METHODS = ['POST', 'PATCH', 'PUT', 'DELETE'];
 
-const SENSITIVE_KEYS = new Set(['password', 'currentPassword', 'newPassword', 'passwordHash', 'token', 'refreshToken']);
-
-function sanitizePayload(obj: Record<string, unknown>): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.entries(obj).map(([k, v]) => [k, SENSITIVE_KEYS.has(k) ? '[REDACTED]' : v]),
-  );
-}
+const ENTITY_MODEL_MAP: Record<string, string> = {
+  requests: 'request',
+  users: 'user',
+  roles: 'role',
+  sectors: 'sector',
+  'request-types': 'requestType',
+};
 
 @Injectable()
 export class AuditInterceptor implements NestInterceptor {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+  ) {}
 
   private readonly logger = new Logger(AuditInterceptor.name);
 
@@ -32,34 +35,53 @@ export class AuditInterceptor implements NestInterceptor {
       user?: { id: string };
       ip: string;
       body: Record<string, unknown>;
+      headers: Record<string, string>;
     }>();
-    const { method, url, user, ip, body } = request;
+    const { method, url, user, ip, body, headers } = request;
 
     if (!WRITE_METHODS.includes(method) || !user) {
       return next.handle();
     }
 
-    const action = `${method}:${url}`;
-    const startPayload = sanitizePayload({ ...body });
+    const entityType = this.extractEntityType(url);
+    const entityId = this.extractEntityId(url);
+    const userAgent = headers['user-agent'] ?? null;
+
+    const beforePromise = this.fetchBefore(entityType, entityId);
 
     return next.handle().pipe(
       tap({
         next: (responseData: { id?: string } | null) => {
-          // Fire-and-forget audit log — never fail the request
-          this.prisma.auditLog
-            .create({
-              data: {
+          const resolvedEntityId = entityId || responseData?.id || 'unknown';
+
+          beforePromise
+            .then((payloadBefore) => {
+              this.auditService.log({
                 actorUserId: user.id,
-                action,
-                entityType: this.extractEntityType(url),
-                entityId: responseData?.id ?? 'unknown',
-                payloadBefore: Prisma.JsonNull,
-                payloadAfter: startPayload as Prisma.InputJsonValue,
+                action: `${method}:${url}`,
+                entityType,
+                entityId: resolvedEntityId,
+                payloadBefore,
+                payloadAfter: { ...body },
                 ipAddress: ip,
-              },
+                userAgent: userAgent ?? undefined,
+              });
             })
             .catch((err: unknown) => {
-              this.logger.error('Audit log write failed', err instanceof Error ? err.stack : String(err));
+              this.logger.error(
+                'Failed to fetch before-state for audit',
+                err instanceof Error ? err.stack : String(err),
+              );
+              this.auditService.log({
+                actorUserId: user.id,
+                action: `${method}:${url}`,
+                entityType,
+                entityId: resolvedEntityId,
+                payloadBefore: null,
+                payloadAfter: { ...body },
+                ipAddress: ip,
+                userAgent: userAgent ?? undefined,
+              });
             });
         },
       }),
@@ -69,5 +91,27 @@ export class AuditInterceptor implements NestInterceptor {
   private extractEntityType(url: string): string {
     const segments = url.split('/').filter(Boolean);
     return segments[0] ?? 'unknown';
+  }
+
+  private extractEntityId(url: string): string {
+    const segments = url.split('/').filter(Boolean);
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return segments.find((s) => UUID_REGEX.test(s)) ?? '';
+  }
+
+  private async fetchBefore(entityType: string, entityId: string): Promise<Record<string, unknown> | null> {
+    if (!entityId) return null;
+    const modelName = ENTITY_MODEL_MAP[entityType];
+    if (!modelName) return null;
+
+    try {
+      const model = (this.prisma as unknown as Record<string, unknown>)[modelName] as
+        | { findUnique: (args: { where: { id: string } }) => Promise<Record<string, unknown> | null> }
+        | undefined;
+      if (!model?.findUnique) return null;
+      return await model.findUnique({ where: { id: entityId } });
+    } catch {
+      return null;
+    }
   }
 }

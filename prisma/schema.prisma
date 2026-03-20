@@ -236,6 +236,7 @@ model AuditLog {
   payloadBefore Json?
   payloadAfter  Json?
   ipAddress   String?
+  userAgent   String?
   createdAt   DateTime @default(now())
 
   // actorUserId is intentionally NOT a FK relation to User.
