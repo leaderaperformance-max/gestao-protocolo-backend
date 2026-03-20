@@ -131,39 +131,40 @@ async function main() {
   console.log(`Admin user upserted: ${adminUser.email}`);
 
   // 5. Create request types using admin user's ID as createdByUserId
+  // flow is a plain string[] of sector codes that the request traverses.
+  // tramitations.service.ts casts flow as string[] and uses indexOf(sector.code).
   const requestTypes = [
     {
       name: 'Licença Prêmio',
       slaDays: 30,
-      flow: { steps: ['PROTOCOLADO', 'EM_ANALISE', 'DEFERIDO'] },
+      flow: ['PROT', 'RH', 'GAB'],
     },
     {
       name: 'Licença Sem Vencimento',
       slaDays: 45,
-      flow: { steps: ['PROTOCOLADO', 'EM_ANALISE', 'DEFERIDO'] },
+      flow: ['PROT', 'RH', 'JUR', 'GAB'],
     },
     {
       name: 'Entrega de Documentos',
       slaDays: 5,
-      flow: { steps: ['PROTOCOLADO', 'RECEBIDO_PELO_SETOR', 'CONCLUIDO'] },
+      flow: ['PROT', 'ADM'],
     },
     {
       name: 'Requerimentos Diversos',
       slaDays: 15,
-      flow: { steps: ['PROTOCOLADO', 'EM_ANALISE', 'DEFERIDO'] },
+      flow: ['PROT', 'RH'],
     },
   ];
 
   for (const rt of requestTypes) {
+    const existing = await prisma.requestType.findFirst({
+      where: { name: rt.name },
+    });
     await prisma.requestType.upsert({
       where: {
-        // RequestType has no unique field other than id, so we use a workaround:
-        // find by name first, if not found create
-        id: (
-          await prisma.requestType.findFirst({ where: { name: rt.name } })
-        )?.id ?? '00000000-0000-0000-0000-000000000000',
+        id: existing?.id ?? '00000000-0000-0000-0000-000000000000',
       },
-      update: {},
+      update: { flow: rt.flow, slaDays: rt.slaDays },
       create: {
         name: rt.name,
         slaDays: rt.slaDays,

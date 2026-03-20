@@ -10,7 +10,7 @@ export class DashboardService {
 
   async overview() {
     const now = new Date();
-    const [total, byStatus, overdue] = await Promise.all([
+    const [total, byStatusRaw, overdue] = await Promise.all([
       this.prisma.request.count(),
       this.prisma.request.groupBy({
         by: ['status'],
@@ -23,6 +23,11 @@ export class DashboardService {
         },
       }),
     ]);
+
+    const byStatus = byStatusRaw.map((r) => ({
+      status: r.status,
+      count: r._count.status,
+    }));
 
     return { total, byStatus, overdue };
   }
