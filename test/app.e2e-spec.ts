@@ -1,57 +1,26 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { App } from 'supertest/types';
-import { AppModule } from './../src/app.module';
+import { setupApp } from './helpers/setup';
 
-describe('Auth (e2e)', () => {
-  let app: INestApplication<App>;
+describe('Route Protection (e2e)', () => {
+  let app: INestApplication;
 
   beforeAll(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
+    app = await setupApp();
+  }, 30000);
 
-    app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(
-      new ValidationPipe({
-        whitelist: true,
-        forbidNonWhitelisted: true,
-        transform: true,
-      }),
-    );
-    await app.init();
-  });
+  afterAll(() => app.close());
 
-  afterAll(async () => {
-    await app.close();
-  });
-
-  describe('POST /auth/login', () => {
-    it('returns 401 for invalid credentials', () => {
-      return request(app.getHttpServer())
-        .post('/auth/login')
-        .send({ email: 'notauser@example.com', password: 'wrongpassword' })
-        .expect(401);
-    });
-
-    it('returns 400 for missing fields', () => {
-      return request(app.getHttpServer())
-        .post('/auth/login')
-        .send({ email: 'notauser@example.com' })
-        .expect(400);
-    });
-  });
-
-  describe('GET /auth/me', () => {
-    it('returns 401 without token', () => {
-      return request(app.getHttpServer()).get('/auth/me').expect(401);
-    });
-  });
-
-  describe('GET /sectors', () => {
-    it('returns 401 without token', () => {
-      return request(app.getHttpServer()).get('/sectors').expect(401);
-    });
+  it.each([
+    '/sectors',
+    '/users',
+    '/roles',
+    '/request-types',
+    '/requests',
+    '/dashboard/overview',
+    '/notifications',
+    '/audit-logs',
+  ])('GET %s returns 401 without token', async (path) => {
+    await request(app.getHttpServer()).get(path).expect(401);
   });
 });
