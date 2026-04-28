@@ -149,6 +149,12 @@ model Request {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
+  // Dados do solicitante (pessoa fisica)
+  requesterName      String?
+  requesterCpf       String?
+  requesterRg        String?
+  requesterBirthDate DateTime?
+
   requester     User        @relation("Requester", fields: [requesterId], references: [id])
   sectorOrigin  Sector      @relation("SectorOrigin", fields: [sectorOriginId], references: [id])
   requestType   RequestType @relation(fields: [requestTypeId], references: [id])

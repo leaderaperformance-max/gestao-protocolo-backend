@@ -36,8 +36,21 @@ export class AuditLogsService {
       this.prisma.auditLog.count({ where }),
     ]);
 
+    // Enrich with actor user names
+    const actorIds = [...new Set(data.map((l) => l.actorUserId))];
+    const users = actorIds.length
+      ? await this.prisma.user.findMany({
+          where: { id: { in: actorIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const userMap = new Map(users.map((u) => [u.id, u.name]));
+
     return {
-      data,
+      data: data.map((log) => ({
+        ...log,
+        actorName: userMap.get(log.actorUserId) ?? 'Usuário removido',
+      })),
       meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     };
   }
@@ -46,7 +59,46 @@ export class AuditLogsService {
     return this.prisma.auditLog.findMany({
       where: { entityType, entityId },
       orderBy: { createdAt: 'desc' },
-      take: 200, // reasonable upper bound for entity history
+      take: 200,
     });
+  }
+
+  /**
+   * Get all activity for a protocol: direct logs on the Request entity
+   * + logs on related Attachments.
+   */
+  async findByProtocol(requestId: string) {
+    // Get attachment IDs for this protocol
+    const attachments = await this.prisma.attachment.findMany({
+      where: { requestId },
+      select: { id: true },
+    });
+    const attachmentIds = attachments.map((a) => a.id);
+
+    const logs = await this.prisma.auditLog.findMany({
+      where: {
+        OR: [
+          { entityType: 'Request', entityId: requestId },
+          ...(attachmentIds.length > 0
+            ? [{ entityType: 'Attachment', entityId: { in: attachmentIds } }]
+            : []),
+        ],
+      },
+      orderBy: { createdAt: 'asc' },
+      take: 500,
+    });
+
+    // Enrich with actor user names
+    const actorIds = [...new Set(logs.map((l) => l.actorUserId))];
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: actorIds } },
+      select: { id: true, name: true },
+    });
+    const userMap = new Map(users.map((u) => [u.id, u.name]));
+
+    return logs.map((log) => ({
+      ...log,
+      actorName: userMap.get(log.actorUserId) ?? 'Usuário removido',
+    }));
   }
 }

@@ -37,6 +37,14 @@ export class AuditLogsController {
     return this.auditLogsService.findAll(query);
   }
 
+  @Get('protocol/:requestId')
+  @ApiOperation({ summary: 'Todas as atividades de um protocolo (timeline completa)' })
+  @ApiResponse({ status: 200, description: 'Atividades do protocolo retornadas com sucesso' })
+  @ApiResponse({ status: 401, description: 'Token JWT ausente ou inválido' })
+  findByProtocol(@Param('requestId') requestId: string) {
+    return this.auditLogsService.findByProtocol(requestId);
+  }
+
   @Get(':entityType/:entityId')
   @ApiOperation({ summary: 'Histórico completo de uma entidade específica' })
   @ApiResponse({ status: 200, description: 'Histórico da entidade retornado com sucesso' })

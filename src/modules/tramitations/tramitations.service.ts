@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { RequestStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AuditService } from '../audit-logs/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ChangeStatusDto } from './dto/change-status.dto';
 import { ForwardDto } from './dto/forward.dto';
@@ -21,6 +22,7 @@ export class TramitationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly auditService: AuditService,
   ) {}
 
   async forward(requestId: string, dto: ForwardDto, currentUser: AuthUser) {
@@ -58,6 +60,27 @@ export class TramitationsService {
         data: { currentSectorId: toSector.id },
       }),
     ]);
+
+    // Audit log
+    this.auditService.log({
+      actorUserId: currentUser.id,
+      action: 'FORWARD_PROTOCOL',
+      entityType: 'Request',
+      entityId: requestId,
+      payloadBefore: {
+        protocolNumber: request.protocolNumber,
+        currentSector: request.currentSector.code,
+        currentSectorName: request.currentSector.name,
+      },
+      payloadAfter: {
+        protocolNumber: request.protocolNumber,
+        fromSector: request.currentSector.code,
+        fromSectorName: request.currentSector.name,
+        toSector: toSector.code,
+        toSectorName: toSector.name,
+        notes: dto.notes ?? null,
+      },
+    });
 
     // Notify users in destination sector (fire-and-forget)
     const destUsers = await this.prisma.user.findMany({
@@ -113,6 +136,41 @@ export class TramitationsService {
       }),
     ]);
 
+    // Audit log
+    this.auditService.log({
+      actorUserId: currentUser.id,
+      action: 'RECEIVE_PROTOCOL',
+      entityType: 'Request',
+      entityId: requestId,
+      payloadAfter: {
+        protocolNumber: request.protocolNumber,
+        sector: request.currentSector.code,
+        sectorName: request.currentSector.name,
+        previousStatus: request.status,
+        newStatus: 'RECEBIDO_PELO_SETOR',
+      },
+    });
+
+    // Notify the user who sent the tramitation (fire-and-forget)
+    void this.notifications.create({
+      userId: pendingTramitation.sentByUserId,
+      title: 'Protocolo recebido pelo setor',
+      body: `O protocolo ${request.protocolNumber} foi recebido pelo setor ${request.currentSector.name}`,
+      type: 'RECEIVED',
+      relatedRequestId: requestId,
+    }).catch(() => {});
+
+    // Also notify the original requester
+    if (request.requesterId !== pendingTramitation.sentByUserId) {
+      void this.notifications.create({
+        userId: request.requesterId,
+        title: 'Protocolo recebido pelo setor',
+        body: `Seu protocolo ${request.protocolNumber} foi recebido pelo setor ${request.currentSector.name}`,
+        type: 'RECEIVED',
+        relatedRequestId: requestId,
+      }).catch(() => {});
+    }
+
     return updated;
   }
 
@@ -138,6 +196,24 @@ export class TramitationsService {
         },
       }),
     ]);
+
+    // Audit log
+    this.auditService.log({
+      actorUserId: currentUser.id,
+      action: 'CHANGE_STATUS',
+      entityType: 'Request',
+      entityId: requestId,
+      payloadBefore: {
+        protocolNumber: request.protocolNumber,
+        status: request.status,
+      },
+      payloadAfter: {
+        protocolNumber: request.protocolNumber,
+        previousStatus: request.status,
+        newStatus: dto.status,
+        justification: dto.justification ?? null,
+      },
+    });
 
     // Notify requester (fire-and-forget)
     void this.notifications.create({

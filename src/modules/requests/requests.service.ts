@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { RequestStatus } from '@prisma/client';
 import { addDays } from 'date-fns';
 import { PrismaService } from '../../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateRequestDto } from './dto/create-request.dto';
 import { ListRequestsDto } from './dto/list-requests.dto';
 import { ProtocolNumberService } from './protocol-number.service';
@@ -16,6 +17,7 @@ export class RequestsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly protocolNumber: ProtocolNumberService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async create(dto: CreateRequestDto, currentUser: AuthUser) {
@@ -34,7 +36,7 @@ export class RequestsService {
     const protocolNumber = await this.protocolNumber.generate(firstSectorCode);
     const deadlineAt = addDays(new Date(), requestType.slaDays);
 
-    return this.prisma.request.create({
+    const created = await this.prisma.request.create({
       data: {
         protocolNumber,
         requesterId: currentUser.id,
@@ -43,6 +45,10 @@ export class RequestsService {
         description: dto.description,
         currentSectorId: firstSector.id,
         deadlineAt,
+        requesterName: dto.requesterName ?? null,
+        requesterCpf: dto.requesterCpf ?? null,
+        requesterRg: dto.requesterRg ?? null,
+        requesterBirthDate: dto.requesterBirthDate ? new Date(dto.requesterBirthDate) : null,
         statusHistory: {
           create: {
             newStatus: RequestStatus.PROTOCOLADO,
@@ -57,6 +63,26 @@ export class RequestsService {
         currentSector: { select: { id: true, name: true, code: true } },
       },
     });
+
+    // Notify users in the first sector of the flow (fire-and-forget)
+    const sectorUsers = await this.prisma.user.findMany({
+      where: { sectorId: firstSector.id, isActive: true },
+    });
+    void Promise.all(
+      sectorUsers
+        .filter((u) => u.id !== currentUser.id)
+        .map((u) =>
+          this.notifications.create({
+            userId: u.id,
+            title: 'Novo protocolo criado',
+            body: `Protocolo ${protocolNumber} (${requestType.name}) foi criado e encaminhado para ${firstSector.name}`,
+            type: 'FORWARDED',
+            relatedRequestId: created.id,
+          }),
+        ),
+    ).catch(() => {});
+
+    return created;
   }
 
   async findAll(query: ListRequestsDto) {

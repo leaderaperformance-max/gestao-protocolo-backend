@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsDateString, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class CreateRequestDto {
   @ApiProperty({
@@ -22,4 +22,24 @@ export class CreateRequestDto {
   @IsOptional()
   @IsString()
   registrationNumber?: string;
+
+  @ApiPropertyOptional({ description: 'Nome completo do solicitante (pessoa física)' })
+  @IsOptional()
+  @IsString()
+  requesterName?: string;
+
+  @ApiPropertyOptional({ description: 'CPF do solicitante', example: '123.456.789-00' })
+  @IsOptional()
+  @IsString()
+  requesterCpf?: string;
+
+  @ApiPropertyOptional({ description: 'RG do solicitante' })
+  @IsOptional()
+  @IsString()
+  requesterRg?: string;
+
+  @ApiPropertyOptional({ description: 'Data de nascimento do solicitante (ISO 8601)', example: '1990-05-15' })
+  @IsOptional()
+  @IsDateString()
+  requesterBirthDate?: string;
 }

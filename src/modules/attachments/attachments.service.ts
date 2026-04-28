@@ -65,6 +65,25 @@ export class AttachmentsService {
     return { url: data.signedUrl, filename: attachment.filename };
   }
 
+  async findById(attachmentId: string) {
+    return this.prisma.attachment.findUnique({ where: { id: attachmentId } });
+  }
+
+  async rename(attachmentId: string, newFilename: string) {
+    const attachment = await this.prisma.attachment.findUnique({ where: { id: attachmentId } });
+    if (!attachment) throw new NotFoundException('Anexo não encontrado');
+
+    // Preserve original extension
+    const ext = attachment.filename.match(/\.[^/.]+$/)?.[0] ?? '';
+    const hasExt = newFilename.match(/\.[^/.]+$/)?.[0] === ext;
+    const finalName = hasExt ? newFilename : `${newFilename}${ext}`;
+
+    return this.prisma.attachment.update({
+      where: { id: attachmentId },
+      data: { filename: finalName },
+    });
+  }
+
   async findByRequest(requestId: string) {
     return this.prisma.attachment.findMany({
       where: { requestId },

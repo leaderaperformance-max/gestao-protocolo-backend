@@ -117,7 +117,7 @@ async function main() {
   const passwordHash = await bcrypt.hash('Admin@2026!', 12);
   const adminUser = await prisma.user.upsert({
     where: { email: 'admin@semed.prainha.pa.gov.br' },
-    update: {},
+    update: { passwordHash, isActive: true },
     create: {
       name: 'Administrador do Sistema',
       email: 'admin@semed.prainha.pa.gov.br',

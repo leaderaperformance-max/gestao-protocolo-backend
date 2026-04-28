@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma, RequestStatus } from '@prisma/client';
+import { RequestStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 const TERMINAL = [RequestStatus.DEFERIDO, RequestStatus.INDEFERIDO, RequestStatus.CONCLUIDO];
@@ -33,60 +33,102 @@ export class DashboardService {
   }
 
   async byPeriod(from: Date, to: Date, granularity: 'day' | 'week' | 'month' = 'day') {
-    const truncFn =
-      granularity === 'week'  ? Prisma.sql`DATE_TRUNC('week',  created_at)` :
-      granularity === 'month' ? Prisma.sql`DATE_TRUNC('month', created_at)` :
-                                Prisma.sql`DATE_TRUNC('day',   created_at)`;
+    const requests = await this.prisma.request.findMany({
+      where: { createdAt: { gte: from, lte: to } },
+      select: { createdAt: true },
+    });
 
-    return this.prisma.$queryRaw<Array<{ period: Date; total: number }>>`
-      SELECT ${truncFn} AS period, COUNT(*)::int AS total
-      FROM requests
-      WHERE created_at BETWEEN ${from} AND ${to}
-      GROUP BY period
-      ORDER BY period ASC
-    `;
+    const buckets = new Map<string, number>();
+    for (const r of requests) {
+      const d = new Date(r.createdAt);
+      let key: string;
+      if (granularity === 'month') {
+        key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+      } else if (granularity === 'week') {
+        const day = d.getDay();
+        const monday = new Date(d);
+        monday.setDate(d.getDate() - ((day + 6) % 7));
+        key = monday.toISOString().slice(0, 10);
+      } else {
+        key = d.toISOString().slice(0, 10);
+      }
+      buckets.set(key, (buckets.get(key) ?? 0) + 1);
+    }
+
+    return Array.from(buckets.entries())
+      .map(([period, total]) => ({ period, total }))
+      .sort((a, b) => a.period.localeCompare(b.period));
   }
 
   async responseTimeBySector() {
-    return this.prisma.$queryRaw<Array<{
-      sector_name: string;
-      sector_code: string;
-      avg_hours_to_receive: number;
-      total_received: number;
-    }>>`
-      SELECT
-        s.name AS sector_name,
-        s.code AS sector_code,
-        ROUND(
-          AVG(EXTRACT(EPOCH FROM (rt.received_at - rt.sent_at)) / 3600)::numeric, 2
-        ) AS avg_hours_to_receive,
-        COUNT(rt.id)::int AS total_received
-      FROM request_tramitations rt
-      JOIN sectors s ON s.id = rt.to_sector_id
-      WHERE rt.received_at IS NOT NULL
-      GROUP BY s.id, s.name, s.code
-      ORDER BY avg_hours_to_receive ASC
-    `;
+    const tramitations = await this.prisma.requestTramitation.findMany({
+      where: { receivedAt: { not: null } },
+      select: {
+        sentAt: true,
+        receivedAt: true,
+        toSector: { select: { name: true, code: true } },
+      },
+    });
+
+    const sectorMap = new Map<string, { name: string; code: string; totalHours: number; count: number }>();
+    for (const t of tramitations) {
+      if (!t.receivedAt || !t.sentAt) continue;
+      const key = t.toSector.code;
+      const hours = (t.receivedAt.getTime() - t.sentAt.getTime()) / (1000 * 60 * 60);
+      const existing = sectorMap.get(key);
+      if (existing) {
+        existing.totalHours += hours;
+        existing.count += 1;
+      } else {
+        sectorMap.set(key, { name: t.toSector.name, code: t.toSector.code, totalHours: hours, count: 1 });
+      }
+    }
+
+    return Array.from(sectorMap.values())
+      .map((s) => ({
+        sector_name: s.name,
+        sector_code: s.code,
+        avg_hours_to_receive: Math.round((s.totalHours / s.count) * 100) / 100,
+        total_received: s.count,
+      }))
+      .sort((a, b) => a.avg_hours_to_receive - b.avg_hours_to_receive);
   }
 
   async userActivity(limit = 10) {
     const safeLimit = Math.min(Math.max(1, limit), 100);
-    return this.prisma.$queryRaw<Array<{
-      user_name: string;
-      email: string;
-      total_actions: number;
-    }>>`
-      SELECT
-        u.name AS user_name,
-        u.email,
-        COUNT(al.id)::int AS total_actions
-      FROM audit_logs al
-      JOIN users u ON u.id = al.actor_user_id
-      WHERE al.created_at >= NOW() - INTERVAL '30 days'
-      GROUP BY u.id, u.name, u.email
-      ORDER BY total_actions DESC
-      LIMIT ${safeLimit}
-    `;
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    const logs = await this.prisma.auditLog.findMany({
+      where: { createdAt: { gte: thirtyDaysAgo } },
+      select: { actorUserId: true },
+    });
+
+    const countMap = new Map<string, number>();
+    for (const log of logs) {
+      if (!log.actorUserId) continue;
+      countMap.set(log.actorUserId, (countMap.get(log.actorUserId) ?? 0) + 1);
+    }
+
+    const topUsers = Array.from(countMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, safeLimit);
+
+    if (topUsers.length === 0) return [];
+
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const validIds = topUsers.filter(([id]) => uuidRegex.test(id)).map(([id]) => id);
+
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: validIds } },
+      select: { id: true, name: true, email: true },
+    });
+
+    const userMap = new Map(users.map((u) => [u.id, u]));
+    return topUsers.map(([id, count]) => ({
+      user_name: userMap.get(id)?.name ?? 'Desconhecido',
+      email: userMap.get(id)?.email ?? '',
+      total_actions: count,
+    }));
   }
 
   async overdue() {

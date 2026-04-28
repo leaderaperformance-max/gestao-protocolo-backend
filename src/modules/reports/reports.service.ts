@@ -4,11 +4,12 @@ import { PrismaService } from '../../prisma/prisma.service';
 
 // pdfmake dynamic imports to avoid type complexity
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const PdfPrinter = require('pdfmake') as new (fonts: object) => {
+const PdfPrinter = require('pdfmake/src/printer') as new (fonts: object) => {
   createPdfKitDocument: (docDefinition: object) => NodeJS.EventEmitter & { end(): void };
 };
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfFonts = require('pdfmake/build/vfs_fonts') as Record<string, string>;
+const pdfFontsModule = require('pdfmake/build/vfs_fonts') as { pdfMake: { vfs: Record<string, string> } };
+const pdfFonts = pdfFontsModule.pdfMake.vfs;
 
 function loadFont(vfs: Record<string, string>, name: string): Buffer {
   const b64 = vfs[name];

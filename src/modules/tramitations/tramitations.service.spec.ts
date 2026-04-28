@@ -27,7 +27,8 @@ describe('TramitationsService', () => {
         request: { findUnique: jest.fn().mockResolvedValue(makeRequest()) },
       } as any;
       const notifMock = { create: jest.fn() } as any;
-      const service = new TramitationsService(prismaMock, notifMock);
+      const auditMock = { log: jest.fn() } as any;
+      const service = new TramitationsService(prismaMock, notifMock, auditMock);
 
       await expect(
         service.changeStatus('req-1', { status: RequestStatus.INDEFERIDO, justification: '' }, makeUser()),
@@ -39,7 +40,8 @@ describe('TramitationsService', () => {
         request: { findUnique: jest.fn().mockResolvedValue(makeRequest()) },
       } as any;
       const notifMock = { create: jest.fn() } as any;
-      const service = new TramitationsService(prismaMock, notifMock);
+      const auditMock = { log: jest.fn() } as any;
+      const service = new TramitationsService(prismaMock, notifMock, auditMock);
 
       await expect(
         service.changeStatus('req-1', { status: RequestStatus.PENDENTE_DOCUMENTO }, makeUser()),
@@ -53,7 +55,8 @@ describe('TramitationsService', () => {
         request: { findUnique: jest.fn().mockResolvedValue(makeRequest()) },
       } as any;
       const notifMock = { create: jest.fn() } as any;
-      const service = new TramitationsService(prismaMock, notifMock);
+      const auditMock = { log: jest.fn() } as any;
+      const service = new TramitationsService(prismaMock, notifMock, auditMock);
       const user = makeUser({ sectorId: 'sec-prot' }); // wrong sector
 
       await expect(
@@ -67,7 +70,8 @@ describe('TramitationsService', () => {
         sector: { findUnique: jest.fn().mockResolvedValue({ id: 'sec-gab', code: 'GAB', name: 'GAB' }) },
       } as any;
       const notifMock = { create: jest.fn() } as any;
-      const service = new TramitationsService(prismaMock, notifMock);
+      const auditMock = { log: jest.fn() } as any;
+      const service = new TramitationsService(prismaMock, notifMock, auditMock);
 
       await expect(
         service.forward('req-1', { toSectorCode: 'GAB' }, makeUser()),
